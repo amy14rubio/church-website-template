@@ -1,0 +1,376 @@
+@import 'tailwindcss';
+
+/* Theme system — every color used across the app should reference one of
+   these custom properties (via Tailwind arbitrary values, e.g.
+   `bg-[var(--surface)]`) instead of a literal slate/blue/red/white class,
+   so switching `data-theme` on <html> re-skins the whole app at once. See
+   ThemeContext for the theme list and persistence. */
+:root {
+  color-scheme: light;
+
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-hover: #f1f5f9;
+  --surface-alt: #f1f5f9;
+  --border: #e5e7eb;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  /* Matches --site-maroon below — this is the default, out-of-the-box
+     theme, so it should read as the church's own brand rather than a
+     generic blue. The other named themes (google-*, apple-*, etc.)
+     intentionally keep their real accent colors — they exist to faithfully
+     mimic those other calendar apps, not to carry the church's branding. */
+  --accent: #7f1317;
+  --accent-hover: #5c0e11;
+  --accent-contrast: #ffffff;
+  --accent-soft: #fbeaea;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fef2f2;
+  --danger-contrast: #ffffff;
+
+  /* A cycling 10-color palette for telling ministries apart at a glance
+     (the calendar sidebar's checkboxes) — repeats past the 10th ministry
+     rather than growing indefinitely. "Toda la iglesia" stays tied to
+     --accent instead of this palette; it isn't really a ministry. */
+  --ministry-1: #f6bf26;
+  --ministry-2: #7c3aed;
+  --ministry-3: #db2777;
+  --ministry-4: #16a34a;
+  --ministry-5: #ea580c;
+  --ministry-6: #dc2626;
+  --ministry-7: #0891b2;
+  --ministry-8: #92400e;
+  --ministry-9: #0d9488;
+  --ministry-10: #29c7dc;
+
+  /* The public marketing site's palette (home page, and future pages
+     like "Quiénes somos"/"Eventos") — deliberately separate from the
+     [data-theme] system above. That system is a personal preference for
+     signed-in users of the calendar tool; the church's public pages
+     should always look the same regardless of it, matching the real
+     brand (maroon/cream) from the previous GoDaddy site. */
+  --site-bg: #ffffff;
+  --site-text: #1c1917;
+  --site-text-muted: #57534e;
+  --site-border: #e7e5e4;
+  --site-placeholder: #78716c;
+  --site-maroon: #7f1317;
+  --site-maroon-dark: #5c0e11;
+  --site-maroon-contrast: #ffffff;
+  --site-danger: #b91c1c;
+
+  /* Several site pages (Enseñanzas, Ministerios, Escuela de Discipulado,
+     Fotos, The Christ Generation) use a black body instead of the white
+     one above — same maroon accent, inverted text colors. */
+  --site-dark-bg: #141414;
+  --site-dark-text: #ffffff;
+  --site-dark-text-muted: #a8a29e;
+  --site-dark-border: #2e2c2b;
+  --site-font-heading: 'Cabin', sans-serif;
+  --site-font-body: 'Lato', sans-serif;
+}
+
+[data-theme='google-light'] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f1f3f4;
+  --surface-alt: #f8f9fa;
+  --border: #dadce0;
+  --text: #3c4043;
+  --text-muted: #5f6368;
+  --text-faint: #80868b;
+  --accent: #1a73e8;
+  --accent-hover: #1765cc;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e8f0fe;
+  --danger: #d93025;
+  --danger-hover: #c5221f;
+  --danger-soft: #fce8e6;
+  --danger-contrast: #ffffff;
+
+  /* Google Calendar's own named calendar colors. */
+  --ministry-1: #d50000;
+  --ministry-2: #f4511e;
+  --ministry-3: #f6bf26;
+  --ministry-4: #33b679;
+  --ministry-5: #0b8043;
+  --ministry-6: #039be5;
+  --ministry-7: #3f51b5;
+  --ministry-8: #7986cb;
+  --ministry-9: #8e24aa;
+  --ministry-10: #e67c73;
+}
+
+[data-theme='google-dark'] {
+  color-scheme: dark;
+  --bg: #202124;
+  --surface: #292a2d;
+  --surface-hover: #35363a;
+  --surface-alt: #35363a;
+  --border: #3c4043;
+  --text: #e8eaed;
+  --text-muted: #9aa0a6;
+  --text-faint: #6f7276;
+  --accent: #649df9;
+  --accent-hover: #a0c2f8;
+  --accent-contrast: #202124;
+  --accent-soft: #3c4043;
+  --danger: #f37f75;
+  --danger-hover: #f7a59f;
+  --danger-soft: #3c2a29;
+  --danger-contrast: #202124;
+
+  /* Google Calendar's real dark-mode chip colors read as rich, saturated
+     jewel tones — not the light theme's hues just paled out for contrast.
+     Material Design's "400" tier is exactly that: vivid enough to stay
+     legible on a dark surface without washing out. */
+  --ministry-1: #ef5350;
+  --ministry-2: #ff7043;
+  --ministry-3: #ffca28;
+  --ministry-4: #66bb6a;
+  --ministry-5: #26a69a;
+  --ministry-6: #42a5f5;
+  --ministry-7: #5c6bc0;
+  --ministry-8: #ab47bc;
+  --ministry-9: #ec407a;
+  --ministry-10: #8d6e63;
+}
+
+[data-theme='apple-light'] {
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-hover: #e5e5ea;
+  --surface-alt: #e5e5ea;
+  --border: #d1d1d6;
+  --text: #1c1c1e;
+  --text-muted: #6e6e73;
+  --text-faint: #8e8e93;
+  --accent: #007aff;
+  --accent-hover: #0066d6;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e5f1ff;
+  --danger: #ff3b30;
+  --danger-hover: #d70015;
+  --danger-soft: #ffe5e5;
+  --danger-contrast: #ffffff;
+
+  /* Apple's system color set. */
+  --ministry-1: #ff3b30;
+  --ministry-2: #ff9500;
+  --ministry-3: #ffcc00;
+  --ministry-4: #34c759;
+  --ministry-5: #00c7be;
+  --ministry-6: #007aff;
+  --ministry-7: #5856d6;
+  --ministry-8: #af52de;
+  --ministry-9: #ff2d55;
+  --ministry-10: #a2845e;
+}
+
+[data-theme='apple-dark'] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-hover: #2c2c2e;
+  --surface-alt: #2c2c2e;
+  --border: #38383a;
+  --text: #f2f2f7;
+  --text-muted: #98989d;
+  --text-faint: #6e6e73;
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --accent-contrast: #ffffff;
+  --accent-soft: #1c2a3a;
+  --danger: #ff453a;
+  --danger-hover: #ff6961;
+  --danger-soft: #3a1f1e;
+  --danger-contrast: #ffffff;
+
+  /* Apple's system colors, dark-mode variants. */
+  --ministry-1: #ff453a;
+  --ministry-2: #ff9f0a;
+  --ministry-3: #ffd60a;
+  --ministry-4: #30d158;
+  --ministry-5: #66d4cf;
+  --ministry-6: #0a84ff;
+  --ministry-7: #5e5ce6;
+  --ministry-8: #bf5af2;
+  --ministry-9: #ff375f;
+  --ministry-10: #ac8e68;
+}
+
+[data-theme='outlook-light'] {
+  --bg: #faf9f8;
+  --surface: #ffffff;
+  --surface-hover: #f3f2f1;
+  --surface-alt: #f3f2f1;
+  --border: #edebe9;
+  --text: #201f1e;
+  --text-muted: #605e5c;
+  --text-faint: #a19f9d;
+  --accent: #0078d4;
+  --accent-hover: #106ebe;
+  --accent-contrast: #ffffff;
+  --accent-soft: #deecf9;
+  --danger: #d13438;
+  --danger-hover: #a4262c;
+  --danger-soft: #fde7e9;
+  --danger-contrast: #ffffff;
+
+  /* Fluent's category-color palette. */
+  --ministry-1: #d13438;
+  --ministry-2: #ca5010;
+  --ministry-3: #ff8c00;
+  --ministry-4: #986f0b;
+  --ministry-5: #107c10;
+  --ministry-6: #00b7c3;
+  --ministry-7: #0078d4;
+  --ministry-8: #5c2d91;
+  --ministry-9: #a80000;
+  --ministry-10: #647687;
+}
+
+[data-theme='outlook-dark'] {
+  color-scheme: dark;
+  --bg: #1b1a19;
+  --surface: #252423;
+  --surface-hover: #323130;
+  --surface-alt: #323130;
+  --border: #3b3a39;
+  --text: #f3f2f1;
+  --text-muted: #c8c6c4;
+  --text-faint: #979593;
+  --accent: #479ef5;
+  --accent-hover: #62abf5;
+  --accent-contrast: #1b1a19;
+  --accent-soft: #2b3a4a;
+  --danger: #f1707b;
+  --danger-hover: #f59aa2;
+  --danger-soft: #442726;
+  --danger-contrast: #1b1a19;
+
+  /* Fluent's category colors, pushed more saturated rather than lightened
+     — the same "vivid jewel tone, not pastel" target as google-dark. */
+  --ministry-1: #ff6b6b;
+  --ministry-2: #ff8c42;
+  --ministry-3: #ffb347;
+  --ministry-4: #ffd60a;
+  --ministry-5: #4caf50;
+  --ministry-6: #00bcd4;
+  --ministry-7: #58a6ff;
+  --ministry-8: #b18aff;
+  --ministry-9: #e0607e;
+  --ministry-10: #8a97a3;
+}
+
+[data-theme='minimalism'] {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-hover: #f0f0f0;
+  --surface-alt: #f2f2f2;
+  --border: #e0e0e0;
+  --text: #1a1a1a;
+  --text-muted: #737373;
+  --text-faint: #a3a3a3;
+  --accent: #262626;
+  --accent-hover: #171717;
+  --accent-contrast: #ffffff;
+  --accent-soft: #ececec;
+  --danger: #404040;
+  --danger-hover: #262626;
+  --danger-soft: #f2f2f2;
+  --danger-contrast: #ffffff;
+
+  /* No variation at all here, unlike every other theme — minimalism means
+     everything grayscale, full stop, not even different shades of gray. */
+  --ministry-1: #000000;
+  --ministry-2: #000000;
+  --ministry-3: #000000;
+  --ministry-4: #000000;
+  --ministry-5: #000000;
+  --ministry-6: #000000;
+  --ministry-7: #000000;
+  --ministry-8: #000000;
+  --ministry-9: #000000;
+  --ministry-10: #000000;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* Every <select> in the app is sized to its own selected option's text
+   (`w-fit` on the element) rather than stretching to fill its container.
+   field-sizing:content gets the box itself to track the content (a no-op
+   fallback in browsers that don't support it yet), but the browser's own
+   native dropdown arrow still reserves its own chrome-drawn space next to
+   the text regardless — replacing it with a custom arrow is the only way
+   to get a genuinely tight gap. The `!important` is needed because each
+   select's own Tailwind px-* utility class sets padding-right too, and a
+   plain element selector here would otherwise lose that cascade fight. */
+select {
+  field-sizing: content;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  padding-right: 1.75rem !important;
+}
+
+/* A small "pressed" micro-animation on every button, site-wide — the
+   subtle press feedback ordinary websites have. `!important` for the
+   same reason as `select` above: many buttons already carry their own
+   Tailwind transition-* utility class, which would otherwise win the
+   cascade fight over `transition-property` and drop `transform` from
+   the animated list, making the scale change below snap instead of
+   ease. Skips disabled buttons, which shouldn't feel "pressable". */
+button:not(:disabled) {
+  transition: transform 100ms ease-out !important;
+}
+
+button:not(:disabled):active {
+  transform: scale(0.96) !important;
+}
+
+/* Opt-out for the rare button where the press-scale above reads wrong —
+   e.g. the Ministerios nav dropdown trigger, which already has its own
+   chevron-rotate animation and sits inline with plain underline nav
+   links that don't scale on click. */
+button.no-press-anim:active {
+  transform: none !important;
+}
+
+/* The teachings carousel's caption — each new title starts pushed down
+   below the masking box and slides up into place, standing in for the
+   outgoing title being pushed up and out (see HomeTeachingsCarousel's
+   own note). Referenced via `animate-[slide-up-in_...]`, keyed by slot so
+   each change remounts and replays it. */
+@keyframes slide-up-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* PhotoMarquee's auto-scrolling ticker — the slot list is rendered
+   twice back-to-back and this slides the whole strip exactly -50% of
+   its own width, so the duplicated half seamlessly takes over as the
+   first half scrolls out, forever. Referenced via
+   `animate-[marquee_28s_linear_infinite]`. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

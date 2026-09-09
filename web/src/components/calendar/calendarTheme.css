@@ -1,0 +1,252 @@
+/* Restyles react-big-calendar's month view to read more like Google
+   Calendar: soft hairline borders, no grey-tinted boxes (past/off-range
+   days only dim their text), a small filled circle on today's date
+   instead of a tinted cell, and light dot+text event chips instead of
+   solid colored blocks. Colors reference the CSS custom properties from
+   index.css so the whole calendar re-skins with the active theme. */
+
+.rbc-month-view {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--surface);
+}
+
+.rbc-month-header {
+  background-color: var(--surface);
+}
+
+.rbc-header {
+  padding: 10px 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.rbc-header + .rbc-header {
+  border-left: 1px solid var(--border);
+}
+
+.rbc-month-row + .rbc-month-row {
+  border-top: 1px solid var(--border);
+}
+
+.rbc-day-bg + .rbc-day-bg {
+  border-left: 1px solid var(--border);
+}
+
+/* Off-range (leading/trailing) days: dim the date number only — the
+   cell itself stays plain, same as every other day. */
+.rbc-off-range-bg {
+  background-color: transparent;
+}
+.rbc-off-range {
+  color: var(--text-faint);
+}
+
+/* Today: no cell tint — just a filled circle behind the date number. */
+.rbc-today {
+  background-color: transparent;
+}
+.rbc-date-cell {
+  padding: 6px;
+  text-align: center;
+  font-size: 0.95rem;
+}
+.rbc-date-cell.rbc-now .rbc-button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 9999px;
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+.rbc-row-segment {
+  padding: 0 4px 2px;
+}
+
+/* Event chips: a small colored dot ahead of the title on a transparent
+   background, instead of a solid colored block — reads lighter and
+   leaves room for more events per cell before "+N more" kicks in. This
+   only applies to ordinary same-day events, though — .rbc-event-allday
+   below (a real multi-day span) keeps the solid extending bar look. */
+.rbc-event:not(.rbc-event-allday) {
+  background-color: transparent;
+  color: var(--text);
+  border-radius: 4px;
+  padding: 1px 4px;
+  box-shadow: none;
+}
+.rbc-event:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.rbc-event.rbc-selected:not(.rbc-event-allday) {
+  background-color: color-mix(in srgb, var(--event-color, var(--accent)) 12%, var(--surface));
+}
+.rbc-event-label {
+  color: var(--text-muted);
+}
+.rbc-row-segment .rbc-event-content::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 9999px;
+  background-color: var(--event-color, var(--accent));
+  vertical-align: middle;
+}
+
+/* A genuine multi-day span (e.g. a multi-day retreat) still reads as one
+   continuous solid bar across the days it covers, same as before this
+   pass — only single-day events got the lighter dot+text treatment. */
+.rbc-event-allday {
+  background-color: var(--event-color, var(--accent));
+  color: var(--accent-contrast);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.rbc-event-allday.rbc-selected {
+  filter: brightness(0.85);
+}
+.rbc-event-allday .rbc-event-content::before {
+  content: none;
+}
+
+/* A day that's already fully passed fades its own event — opacity, not a
+   color swap to gray, so the ministry color stays visible underneath,
+   just dimmed (matches Google Calendar's own past-event treatment). One
+   rule covers month view's dot+text chip and week/day view's filled or
+   outlined block alike, since it just fades whatever's already rendered.
+   The day cell itself is never greyed out (see .rbc-off-range-bg above). */
+.rbc-event-past {
+  opacity: 0.55;
+}
+
+.rbc-show-more {
+  background-color: transparent;
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 0.75rem;
+  padding: 0 4px;
+}
+.rbc-show-more:hover,
+.rbc-show-more:focus {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* Week/day view: the same card look as month view (theme surface
+   background, soft hairline borders instead of react-big-calendar's
+   default #ddd), plus a taller header row than month's compact one —
+   CalendarTimeGridHeader stacks a weekday label above the date number,
+   which needs the room. */
+.rbc-time-view {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--surface);
+}
+.rbc-time-view .rbc-header {
+  /* react-big-calendar's default .rbc-header has overflow:hidden and
+     min-height:0, which clip CalendarTimeGridHeader's two-line (weekday
+     + date circle) content down to whatever height the flex row happened
+     to end up at — force both the row and this cell tall enough to show
+     it in full instead. */
+  min-height: 64px;
+  overflow: visible;
+  padding: 12px 4px;
+  border-bottom: none;
+}
+.rbc-time-header > .rbc-row:first-child {
+  min-height: 64px;
+}
+/* Day view's single-column header row is hidden by react-big-calendar's
+   own default CSS (it assumes the toolbar's own label already shows the
+   date) — restore it so day view gets the same weekday+date header as
+   week view instead of just the empty gutter corner. */
+.rbc-time-header-cell-single-day {
+  display: flex;
+}
+/* Day view's header cell is left-aligned (week view's stays centered —
+   its several narrow columns read better that way). react-big-calendar's
+   own default .rbc-header sets text-align:center, which — since the
+   header content ends up wrapped in an inline-block <button> — overrides
+   CalendarTimeGridHeader's own flex alignment from the outside, so this
+   has to be fixed at the text-align level, not just inside the component. */
+.rbc-time-header-cell-single-day .rbc-header {
+  text-align: left;
+}
+.rbc-time-header.rbc-overflowing {
+  border-right: 1px solid var(--border);
+}
+.rbc-time-header > .rbc-row:first-child,
+.rbc-time-header > .rbc-row.rbc-row-resource {
+  border-bottom: 1px solid var(--border);
+}
+.rbc-time-header-content,
+.rbc-time-content,
+.rbc-time-content > * + * > *,
+.rbc-timeslot-group,
+.rbc-time-view .rbc-allday-cell + .rbc-allday-cell {
+  border-color: var(--border);
+}
+
+/* Week/day view events read as solid Google-Calendar-style time blocks
+   (there's room for it, unlike month view's small dot+text chips) —
+   filled when the signed-in user has RSVPed attending, outlined with the
+   surface background otherwise (including "haven't responded yet"). Multi-
+   day/all-day bars are untouched here, same as their .rbc-event-past
+   treatment above.
+*/
+.rbc-time-view .rbc-event:not(.rbc-event-allday) {
+  background-color: var(--event-color, var(--accent));
+  border: 1px solid var(--event-color, var(--accent));
+  color: var(--accent-contrast);
+  border-radius: 4px;
+}
+.rbc-time-view .rbc-event-unconfirmed:not(.rbc-event-allday) {
+  background-color: var(--surface);
+  border: 1px solid var(--event-color, var(--accent));
+  color: var(--event-color, var(--accent));
+}
+.rbc-time-view .rbc-event-unconfirmed:not(.rbc-event-allday) .rbc-event-label {
+  color: var(--event-color, var(--accent));
+}
+
+/* Mobile: event text shrinks so a chip can show at least a couple
+   characters of its title instead of truncating to nothing in a narrow
+   column, and month view switches from the dot+text chip to the same
+   fill/outline RSVP treatment week/day view already uses — there's no
+   room for a separate dot at this size, so the block's own color carries
+   the "confirmed" signal instead. */
+@media (max-width: 767px) {
+  .rbc-event {
+    font-size: 0.6875rem;
+  }
+  .rbc-event-label {
+    font-size: 0.625rem;
+  }
+
+  .rbc-month-view .rbc-event:not(.rbc-event-allday) {
+    background-color: var(--event-color, var(--accent));
+    border: 1px solid var(--event-color, var(--accent));
+    color: var(--accent-contrast);
+  }
+  .rbc-month-view .rbc-event-unconfirmed:not(.rbc-event-allday) {
+    background-color: var(--surface);
+    border: 1px solid var(--event-color, var(--accent));
+    color: var(--event-color, var(--accent));
+  }
+  .rbc-month-view .rbc-row-segment .rbc-event-content::before {
+    content: none;
+  }
+}

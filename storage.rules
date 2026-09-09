@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Cross-service rules (Storage reading Firestore) — see
+// https://firebase.google.com/docs/rules/rules-and-auth#cross-service_rules_authorization.
+// Mirrors firestore.rules' isPastor()/isCoAdmin() for the one collection
+// Storage needs to check: only the Pastor and Co-admins curate the
+// public website's media library (src/lib/siteMedia.ts); everyone can
+// read it, since it's what renders on the public site.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentRole() {
+      return isSignedIn()
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function canManageSiteMedia() {
+      return currentRole() == 'admin' || currentRole() == 'coAdmin';
+    }
+
+    // Size/content-type limits mirror the client's own checks (see
+    // assertUploadableFile/assertUploadableImage in src/lib/siteMedia.ts
+    // and profilePicture.ts) — those alone are a UX nicety, not security,
+    // since any direct API call bypasses whatever the app's own JS
+    // checks before calling uploadBytes. request.resource is only
+    // populated on create/update, not delete, so delete needs its own
+    // clause rather than sharing one blanket `write`.
+    match /site-media/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if canManageSiteMedia()
+        && request.resource.size < 50 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('video/.*'));
+      allow delete: if canManageSiteMedia();
+    }
+
+    // One object per user (path is just their uid — see
+    // src/lib/profilePicture.ts), so re-uploading overwrites the old
+    // photo instead of accumulating orphaned files. Readable by anyone
+    // signed in, since a profile picture shows up in shared UI (the
+    // profile menu, attendee lists) regardless of who's viewing.
+    match /profile-pictures/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+  }
+}

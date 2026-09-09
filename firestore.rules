@@ -1,0 +1,345 @@
+rules_version = '2';
+
+// Authorization model — see PROJECT_SPEC.md sections 7-28, 37-38.
+//
+// WHO CAN SEE AN EVENT?  -> visibility flags (viewableForPublic / viewableForMinistry)
+// WHO CAN EDIT AN EVENT? -> role + ministry assignment + event ownership (ministryId)
+// WHO CAN CHANGE ROLES?  -> Pastor (role == 'admin') only
+//
+// These three concepts are kept separate on purpose. Do not combine them.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function currentRole() {
+      return isSignedIn() ? currentUserDoc().role : null;
+    }
+
+    function currentMinistryIds() {
+      return isSignedIn() ? currentUserDoc().ministryIds : [];
+    }
+
+    function isPastor() {
+      return currentRole() == 'admin';
+    }
+
+    function isCoAdmin() {
+      return currentRole() == 'coAdmin';
+    }
+
+    function isLeader() {
+      return currentRole() == 'leader';
+    }
+
+    // Ministry-calendar access piggybacks on the role field itself — a
+    // plain 'member' (the self-provisioned default, see the create rule
+    // below) has not been approved yet; every other role either already
+    // carries staff privileges or was promoted here via an approved
+    // request (see src/lib/ministryAccess.ts). See PROJECT_SPEC.md's
+    // "Ministry Calendar Access" section for why this replaced the old
+    // "every authenticated user sees ministry events" rule.
+    function canViewMinistryCalendar() {
+      return isSignedIn() && currentRole() != 'member';
+    }
+
+    // A Pastor/Co-admin approving ("member" -> "ministryMember"),
+    // rejecting (stays "member", status -> "rejected"), or revoking
+    // ("ministryMember" -> "member") a ministry-calendar access request.
+    // Deliberately narrower than a general role change: only these two
+    // roles are ever involved on either side, ministryIds can't move, and
+    // a staff member can never target their own account this way (so an
+    // admin/co-admin can't "approve themselves" — not that either role
+    // is ever 'member' to begin with, but this closes that off
+    // explicitly rather than relying on that alone).
+    function isStaffAccessToggle(uid) {
+      return (isPastor() || isCoAdmin())
+        && request.auth.uid != uid
+        && resource.data.role in ['member', 'ministryMember']
+        && request.resource.data.role in ['member', 'ministryMember']
+        && request.resource.data.ministryIds == resource.data.ministryIds
+        && request.resource.data.ministryAccessPromptShown == resource.data.ministryAccessPromptShown
+        // Locks this action to ONLY the fields it's meant to touch — without
+        // this, a Co-admin approving/rejecting/revoking access could smuggle
+        // an unrelated change (another field on the same doc) into the same
+        // write, since the checks above only pin down role/ministryIds/
+        // ministryAccessPromptShown, not the full set of what's allowed to
+        // move.
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'ministryAccessRequestStatus', 'updatedAt'])
+        && (
+          (request.resource.data.role == 'ministryMember' && request.resource.data.ministryAccessRequestStatus == 'none')
+          || (request.resource.data.role == 'member' && request.resource.data.ministryAccessRequestStatus in ['none', 'rejected'])
+        );
+    }
+
+    // A user editing their own doc must never move their own role or
+    // ministry assignment (that's what keeps "only staff can grant
+    // ministry access" true), and the two ministry-access bookkeeping
+    // fields may only change through one of their own valid shapes.
+    function isValidSelfUpdate(uid) {
+      return request.auth.uid == uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.ministryIds == resource.data.ministryIds
+        && (isPlainProfileEdit() || isRequestingMinistryAccess() || isMarkingAccessPromptShown());
+    }
+
+    // Neither ministry-access field moves — an ordinary name/photo/etc. edit.
+    function isPlainProfileEdit() {
+      return request.resource.data.ministryAccessRequestStatus == resource.data.ministryAccessRequestStatus
+        && request.resource.data.ministryAccessPromptShown == resource.data.ministryAccessPromptShown;
+    }
+
+    // Submitting a fresh request — only legal while not already pending,
+    // and never bundled with marking the prompt fields any differently
+    // than they already were (that's its own separate action below).
+    function isRequestingMinistryAccess() {
+      return resource.data.ministryAccessRequestStatus != 'pending'
+        && request.resource.data.ministryAccessRequestStatus == 'pending'
+        && request.resource.data.ministryAccessPromptShown == resource.data.ministryAccessPromptShown;
+    }
+
+    // The one-time sign-in prompt can only ever flip false -> true, never
+    // back, and never alongside a request-status change of its own.
+    function isMarkingAccessPromptShown() {
+      return resource.data.ministryAccessPromptShown == false
+        && request.resource.data.ministryAccessPromptShown == true
+        && request.resource.data.ministryAccessRequestStatus == resource.data.ministryAccessRequestStatus;
+    }
+
+    // An event must remain visible to at least one audience.
+    function hasVisibleContent(data) {
+      return data.viewableForPublic == true || data.viewableForMinistry == true;
+    }
+
+    // The Pastor and Co-admins can manage any event, church-wide or
+    // ministry-specific. Ministry-specific events are also managed by the
+    // Encargado currently assigned to that ministry.
+    function canManageEventData(data) {
+      return isPastor()
+        || isCoAdmin()
+        || (isLeader() && data.ministryId != null && data.ministryId in currentMinistryIds());
+    }
+
+    // Users -------------------------------------------------------------
+    // Field allowlist + a basic type/length check on `name` — applied to
+    // every create/update below regardless of which path grants it
+    // (including the Pastor's own "change anything" path), so a raw API
+    // call can't smuggle an unrecognized field (e.g. reintroducing `email`
+    // here — see users/{uid}/private/{docId} below for why that field
+    // isn't allowed on this doc at all) or an unbounded string onto a
+    // profile that's readable by every signed-in member.
+    function hasOnlyAllowedUserFields() {
+      return request.resource.data.keys().hasOnly([
+        'uid', 'name', 'role', 'ministryIds', 'photoURL', 'photoFocalPoint', 'photoRemovedByUser',
+        'ministryAccessRequestStatus', 'ministryAccessRequestedAt', 'ministryAccessPromptShown',
+        'fcmToken', 'createdAt', 'updatedAt'
+      ]);
+    }
+
+    function hasValidUserName() {
+      return request.resource.data.name is string && request.resource.data.name.size() <= 200;
+    }
+
+    match /users/{uid} {
+      // Any authenticated ministry user can look up names/roles (needed to
+      // display attendance lists and RSVP status across ministry areas).
+      // Email is deliberately NOT among those fields — see
+      // users/{uid}/private/{docId} below.
+      allow read: if isSignedIn();
+
+      // Self-provisioning on first login. New accounts always start at the
+      // lowest privilege level ('member', no ministry-calendar access) with
+      // no ministry assignment — only the Pastor/Co-admins can promote a
+      // role afterward (Pastor for any role; Pastor or Co-admin for the
+      // narrow member <-> ministryMember approval below).
+      allow create: if isSignedIn()
+        && hasOnlyAllowedUserFields()
+        && hasValidUserName()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'member'
+        && request.resource.data.ministryIds.size() == 0
+        && request.resource.data.ministryAccessRequestStatus == 'none'
+        && request.resource.data.ministryAccessPromptShown == false;
+
+      // Three ways this doc can legitimately be updated:
+      //  1. The Pastor can change anything, for anyone (existing rule).
+      //  2. A Pastor/Co-admin approving, rejecting, or revoking ministry-
+      //     calendar access — but ONLY that: it may move `role` between
+      //     exactly 'member' and 'ministryMember' (never promote to
+      //     leader/coAdmin/admin, never touch ministryIds), on someone
+      //     else's doc, never their own. This is a deliberate, narrow
+      //     carve-out from "only the Pastor changes roles" — see
+      //     PROJECT_SPEC.md's "Ministry Calendar Access" section.
+      //  3. A user editing their own profile — role/ministryIds must stay
+      //     exactly as they were, and the two ministry-access bookkeeping
+      //     fields may only move through their own valid shapes (a fresh
+      //     request, or marking the one-time sign-in prompt seen) rather
+      //     than being set to anything else.
+      allow update: if hasOnlyAllowedUserFields()
+        && hasValidUserName()
+        && (isPastor() || isStaffAccessToggle(uid) || isValidSelfUpdate(uid));
+
+      allow delete: if isPastor();
+
+      // A user's email — split into its own doc rather than a field on
+      // the one above specifically so it ISN'T among what "any signed-in
+      // member" can read. Anyone can create an account here with no
+      // approval gate at all (see the self-provisioning rule above), so a
+      // broadly-readable email field would let any such throwaway account
+      // scrape every real member's email in one query — a phishing/spam
+      // list handed out for free. Only the two staff-only screens that
+      // legitimately need another member's email (Administración's user
+      // list and ministry-access request list) read this; write access
+      // mirrors the main doc's own "self or Pastor" pattern (Co-admins
+      // don't get general edit power over someone else's core profile
+      // data there either).
+      match /private/{docId} {
+        allow read: if isSignedIn() && (request.auth.uid == uid || isPastor() || isCoAdmin());
+        allow write: if isSignedIn() && (request.auth.uid == uid || isPastor());
+      }
+    }
+
+    // Ministries ----------------------------------------------------------
+    match /ministries/{ministryId} {
+      // Ministry names are needed on the public calendar and event forms.
+      allow read: if true;
+      allow write: if isPastor();
+    }
+
+    // Site media ------------------------------------------------------------
+    // The public website's media library (see src/lib/siteMedia.ts) — the
+    // Pastor and Co-admins curate what's uploaded; everyone (including
+    // signed-out visitors) can read it, since it's what renders on the
+    // public site itself.
+    match /siteMedia/{mediaId} {
+      allow read: if true;
+
+      allow create: if (isPastor() || isCoAdmin())
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if isPastor() || isCoAdmin();
+    }
+
+    // Site placements ---------------------------------------------------
+    // Which siteMedia item (if any) fills a named spot on the public site
+    // — e.g. one of Enseñanzas' 12 video slots (src/lib/sitePlacements.ts).
+    // Doc id is the slot key itself, not a generated one.
+    match /sitePlacements/{slotKey} {
+      allow read: if true;
+      allow write: if isPastor() || isCoAdmin();
+    }
+
+    // Site text -----------------------------------------------------------
+    // Inline-editable text overrides for the public site (headings, intro
+    // copy, service times, etc. — src/components/site/EditableText.tsx).
+    // Doc id is the text slot key; absent means "use the fallback copy
+    // baked into the page." Long-form theological copy (Quiénes somos'
+    // history/vision/statement of faith) intentionally isn't wired up to
+    // this yet — see EditableText's own note.
+    match /siteText/{slotKey} {
+      allow read: if true;
+      allow write: if isPastor() || isCoAdmin();
+    }
+
+    // Social connections ----------------------------------------------------
+    // The Facebook (and eventually Instagram) import feature — see
+    // functions/src/index.ts and src/hooks/useSocialConnections.ts. Only
+    // ever holds non-secret "connected as X" status the admin UI shows;
+    // written by the OAuth callback function (Admin SDK, bypasses these
+    // rules entirely) after a successful connection.
+    match /socialConnections/{provider} {
+      allow read: if isPastor() || isCoAdmin();
+      allow write: if isPastor() || isCoAdmin();
+    }
+
+    // The actual Page access token from that OAuth flow — deliberately
+    // unreachable from any client SDK, admin or not. Only Cloud Functions
+    // (Admin SDK, which bypasses security rules) ever reads or writes
+    // this; there is no legitimate client-side reason to touch it.
+    match /socialTokens/{provider} {
+      allow read, write: if false;
+    }
+
+    // One-time, server-generated nonces correlating a Facebook OAuth
+    // callback back to the admin who started it (functions/src/index.ts)
+    // — also Admin-SDK-only, never client-readable/writable.
+    match /oauthStates/{state} {
+      allow read, write: if false;
+    }
+
+    // Events --------------------------------------------------------------
+    match /events/{eventId} {
+      allow read: if resource.data.viewableForPublic == true
+        || (canViewMinistryCalendar() && resource.data.viewableForMinistry == true);
+
+      allow create: if isSignedIn()
+        && hasVisibleContent(request.resource.data)
+        && canManageEventData(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && hasVisibleContent(request.resource.data)
+        && canManageEventData(resource.data)
+        && canManageEventData(request.resource.data)
+        && request.resource.data.updatedBy == request.auth.uid;
+
+      allow delete: if isSignedIn() && canManageEventData(resource.data);
+
+      // RSVPs — one document per user per event. -------------------------
+      match /rsvps/{rsvpUid} {
+        // Mirrors the parent event's own read rule (a plain `isSignedIn()`
+        // here let anyone see who's attending any event at all, including
+        // a ministry-only one they can't even see exists) — always your
+        // own RSVP, always if you can manage the event, otherwise only if
+        // you could actually see this event in the first place.
+        allow read: if isSignedIn()
+          && (
+            request.auth.uid == rsvpUid
+            || canManageEventData(get(/databases/$(database)/documents/events/$(eventId)).data)
+            || get(/databases/$(database)/documents/events/$(eventId)).data.viewableForPublic == true
+            || (canViewMinistryCalendar()
+                && get(/databases/$(database)/documents/events/$(eventId)).data.viewableForMinistry == true)
+          );
+
+        // Attendance is a ministry-specific-event feature — a church-wide
+        // event (ministryId == null) has no RSVP list.
+        allow create, update: if isSignedIn()
+          && request.auth.uid == rsvpUid
+          && request.resource.data.uid == rsvpUid
+          && request.resource.data.status in ['attending', 'not_attending', 'maybe']
+          && get(/databases/$(database)/documents/events/$(eventId)).data.ministryId != null;
+
+        // A user can always withdraw their own RSVP. Whoever can manage the
+        // parent event can also delete any RSVP under it — needed so
+        // deleting/consolidating a recurring series' occurrences (see
+        // src/lib/eventSeries.ts) can clean up RSVPs that aren't theirs.
+        allow delete: if isSignedIn()
+          && (request.auth.uid == rsvpUid
+              || canManageEventData(get(/databases/$(database)/documents/events/$(eventId)).data));
+      }
+    }
+
+    // Collection-group RSVP reads — lets the calendar show a signed-in
+    // user their own "going" status on every event's chip via one query
+    // instead of a read per event. The nested rule above only applies to
+    // a query already scoped to one specific event's rsvps subcollection;
+    // a collectionGroup() query spanning every event needs its own rule.
+    // Scoped to the requester's own docs only (not every RSVP, unlike the
+    // read rule above) — that's what keeps this provably compliant for a
+    // list query: Firestore can confirm every possible match satisfies it
+    // using only the query's own where('uid', '==', ...) filter, same
+    // technique CalendarView's events query uses for its visibility
+    // OR-filter.
+    match /{path=**}/rsvps/{rsvpUid} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+  }
+}
