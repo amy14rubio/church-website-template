@@ -21,7 +21,7 @@ an optional Cloud Function for connecting a church's Facebook/Instagram account.
 
 ## See It In Action
 
-[Link to a real church site built on this template — e.g. your own]
+[Live example](https://comunidadcristianalapalabradefe.com) — a real church site built on this template
 
 To run this yourself, see [SETUP.md](SETUP.md) — it covers environment setup, a couple of things
 that were intentionally left out of this repo (like logo images), and how to customize it for
